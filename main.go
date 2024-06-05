@@ -1,7 +1,9 @@
 package main
 
 import (
-	"container-chief/chief_control"
+	"container-chief/pkg/control"
+	"container-chief/pkg/discord"
+	"fmt"
 	"log/slog"
 	"os"
 	"time"
@@ -27,7 +29,7 @@ func main() {
 	}
 
 	server := fiber.New()
-	chiefService := chief_control.NewChiefService()
+	chiefService := control.NewChiefService()
 
 	defer func() {
 		slog.Info("Stopping container-chief")
@@ -51,7 +53,9 @@ func main() {
 	})
 
 	server.Post("/discord-webhook", func(c *fiber.Ctx) error {
-		slog.Info("Discord webhook detected")
+		body := c.BodyParser(discord.InteractionWebhook{})
+
+		fmt.Println(body)
 
 		return c.JSON(fiber.Map{
 			"message": "ok",

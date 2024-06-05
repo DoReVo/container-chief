@@ -1,4 +1,4 @@
-package chief_control
+package control
 
 import (
 	"context"
