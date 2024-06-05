@@ -2,7 +2,6 @@ package main
 
 import (
 	"container-chief/chief_control"
-	"fmt"
 	"log/slog"
 	"os"
 	"time"
@@ -28,19 +27,7 @@ func main() {
 	}
 
 	server := fiber.New()
-
 	chiefService := chief_control.NewChiefService()
-
-	containerList, err := chiefService.GetAllContainers()
-	if err != nil {
-		slog.Error("Failed")
-	}
-
-	for _, container := range containerList {
-		labels := chiefService.GetLabels(container)
-
-		fmt.Println(labels)
-	}
 
 	defer func() {
 		slog.Info("Stopping container-chief")
