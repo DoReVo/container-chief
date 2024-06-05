@@ -2,6 +2,7 @@ package chief_control
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"slices"
 
@@ -17,7 +18,14 @@ var DEFAULT_API_VERSION = "1.24"
 // Indicate that we can control this container
 var CONTROL_LABEL = "chief.enable=true"
 
-var LABEL_LIST = []string{"chief.enable", "chief.description", "chief.name", "chief.id"}
+var (
+	LABEL_ENABLE      = "chief.enable"
+	LABEL_ID          = "chief.id"
+	LABEL_NAME        = "chief.name"
+	LABEL_DESCRIPTION = "chief.description"
+)
+
+var LABEL_LIST = []string{LABEL_ENABLE, LABEL_DESCRIPTION, LABEL_NAME, LABEL_ID}
 
 type ChiefService struct {
 	Cli *client.Client
@@ -57,6 +65,13 @@ type ContainerLabel struct {
 	Value string
 }
 
+type ChiefContainer struct {
+	ID          string
+	DockerID    string
+	Name        string
+	Description string
+}
+
 func (cs *ChiefService) GetLabels(container types.Container) []ContainerLabel {
 	labels := container.Labels
 
@@ -76,6 +91,17 @@ func (cs *ChiefService) GetLabels(container types.Container) []ContainerLabel {
 	return labelList
 }
 
+func (cs *ChiefService) GetInfo(container types.Container) ChiefContainer {
+	labels := container.Labels
+
+	return ChiefContainer{
+		ID:          labels[LABEL_ID],
+		DockerID:    container.ID,
+		Name:        labels[LABEL_NAME],
+		Description: labels[LABEL_DESCRIPTION],
+	}
+}
+
 func (cs *ChiefService) RestartContainer(id string) error {
 	slog.Info("Restarting container", "id", id)
 	err := cs.Cli.ContainerRestart(cs.Ctx, id, container.StopOptions{Signal: "", Timeout: nil})
@@ -86,4 +112,22 @@ func (cs *ChiefService) RestartContainer(id string) error {
 
 	slog.Info("Successfully restarted container", "id", id)
 	return nil
+}
+
+var ErrContainerNotFound = errors.New("container not found")
+
+func (cs *ChiefService) GetContainerId(id string) (string, error) {
+	containers, err := cs.GetAllContainers()
+	if err != nil {
+		return "", err
+	}
+
+	for _, container := range containers {
+		chiefContainer := cs.GetInfo(container)
+		if chiefContainer.ID == id {
+			return chiefContainer.ID, nil
+		}
+	}
+
+	return "", ErrContainerNotFound
 }
