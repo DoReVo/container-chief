@@ -60,7 +60,7 @@ type ContainerLabel struct {
 func (cs *ChiefService) GetLabels(container types.Container) []ContainerLabel {
 	labels := container.Labels
 
-	var labelList []ContainerLabel = []ContainerLabel{}
+	labelList := []ContainerLabel{}
 
 	for key, value := range labels {
 
@@ -74,4 +74,16 @@ func (cs *ChiefService) GetLabels(container types.Container) []ContainerLabel {
 	}
 
 	return labelList
+}
+
+func (cs *ChiefService) RestartContainer(id string) error {
+	slog.Info("Restarting container", "id", id)
+	err := cs.Cli.ContainerRestart(cs.Ctx, id, container.StopOptions{Signal: "", Timeout: nil})
+	if err != nil {
+		slog.Warn("Failed to restart container", "id", id, "error", err)
+		return err
+	}
+
+	slog.Info("Successfully restarted container", "id", id)
+	return nil
 }
