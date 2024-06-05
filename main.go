@@ -53,9 +53,16 @@ func main() {
 	})
 
 	server.Post("/discord-webhook", func(c *fiber.Ctx) error {
-		body := c.BodyParser(discord.InteractionWebhook{})
+		bodyContent := discord.InteractionWebhook{}
+		err := c.BodyParser(&bodyContent)
 
-		fmt.Println(body)
+		if err != nil {
+			slog.Warn("Cannot parse body", "error", err)
+		} else {
+			fmt.Println(bodyContent)
+		}
+
+		fmt.Println("DOne print")
 
 		return c.JSON(fiber.Map{
 			"message": "ok",
