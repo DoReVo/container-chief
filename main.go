@@ -3,7 +3,6 @@ package main
 import (
 	"container-chief/pkg/control"
 	"container-chief/pkg/discord"
-	"fmt"
 	"log/slog"
 	"os"
 	"time"
@@ -30,6 +29,7 @@ func main() {
 
 	server := fiber.New()
 	chiefService := control.NewChiefService()
+	discordService := discord.NewDiscordService()
 
 	defer func() {
 		slog.Info("Stopping container-chief")
@@ -54,15 +54,30 @@ func main() {
 
 	server.Post("/discord-webhook", func(c *fiber.Ctx) error {
 		bodyContent := discord.InteractionWebhook{}
-		err := c.BodyParser(&bodyContent)
 
+		err := c.BodyParser(&bodyContent)
 		if err != nil {
 			slog.Warn("Cannot parse body", "error", err)
-		} else {
-			fmt.Println(bodyContent)
+			return c.Status(400).JSON(fiber.Map{"ok": false})
 		}
 
-		fmt.Println("DOne print")
+		// Pretty print the body
+		slog.Info("Body content", "body", bodyContent)
+
+		if bodyContent.Type == 1 {
+			slog.Info("Ping received")
+
+			signature := c.Get("X-Signature-Ed25519")
+			timestamp := c.Get("X-Signature-Timestamp")
+
+			isValidSignature := discordService.VerifyWebhookSignature(signature, timestamp, string(c.BodyRaw()))
+
+			if !isValidSignature {
+				return c.Status(401).JSON(fiber.Map{"ok": false})
+			}
+
+			return c.JSON(fiber.Map{"type": 1})
+		}
 
 		return c.JSON(fiber.Map{
 			"message": "ok",

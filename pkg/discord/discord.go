@@ -1,5 +1,11 @@
 package discord
 
+import (
+	"crypto/ed25519"
+	"encoding/hex"
+	"os"
+)
+
 type InteractionWebhook struct {
 	AuthorizingIntegrationOwners map[string]interface{} `json:"authorizing_integration_owners"`
 	AppPermissions               string                 `json:"app_permissions"`
@@ -23,4 +29,36 @@ type DiscordUser struct {
 	PublicFlags          int         `json:"public_flags"`
 	Bot                  bool        `json:"bot"`
 	System               bool        `json:"system"`
+}
+
+type DiscordService struct {
+	AppPublicKey string
+}
+
+func NewDiscordService() *DiscordService {
+	appPublicKey := os.Getenv("DISCORD_APP_PUBLIC_KEY")
+
+	if appPublicKey == "" {
+		panic("Discord app public key not defined in environment variable")
+	}
+
+	return &DiscordService{
+		AppPublicKey: appPublicKey,
+	}
+}
+
+func (ds *DiscordService) VerifyWebhookSignature(signature string, timestamp string, requestBody string) bool {
+	msg := timestamp + (requestBody)
+
+	decodedSignature, err := hex.DecodeString(signature)
+	if err != nil {
+		return false
+	}
+
+	decodedPublicKey, err := hex.DecodeString(ds.AppPublicKey)
+	if err != nil {
+		return false
+	}
+
+	return ed25519.Verify(decodedPublicKey, []byte(msg), decodedSignature)
 }
