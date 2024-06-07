@@ -1,11 +1,11 @@
 package main
 
 import (
+	"container-chief/pkg/api/handler"
 	"container-chief/pkg/control"
 	"container-chief/pkg/discord"
 	"log/slog"
 	"os"
-	"time"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -45,44 +45,8 @@ func main() {
 		slog.Info("Exiting container-chief")
 	}()
 
-	server.Get("/", func(c *fiber.Ctx) error {
-		return c.Status(fiber.StatusOK).JSON(struct {
-			Timestamp string `json:"timestamp"`
-			Message   string `json:"message"`
-		}{Message: "Hello from container-chief", Timestamp: time.Now().Format(time.RFC3339)})
-	})
-
-	server.Post("/discord-webhook", func(c *fiber.Ctx) error {
-		bodyContent := discord.InteractionWebhook{}
-
-		err := c.BodyParser(&bodyContent)
-		if err != nil {
-			slog.Warn("Cannot parse body", "error", err)
-			return c.Status(400).JSON(fiber.Map{"ok": false})
-		}
-
-		// Pretty print the body
-		slog.Info("Body content", "body", bodyContent)
-
-		if bodyContent.Type == 1 {
-			slog.Info("Ping received")
-
-			signature := c.Get("X-Signature-Ed25519")
-			timestamp := c.Get("X-Signature-Timestamp")
-
-			isValidSignature := discordService.VerifyWebhookSignature(signature, timestamp, string(c.BodyRaw()))
-
-			if !isValidSignature {
-				return c.Status(401).JSON(fiber.Map{"ok": false})
-			}
-
-			return c.JSON(fiber.Map{"type": 1})
-		}
-
-		return c.JSON(fiber.Map{
-			"message": "ok",
-		})
-	})
+	server.Get("/", handler.RootHandler)
+	server.Post("/discord-webhook", handler.DiscordWebhookHandler)
 
 	server.Listen(":" + server_port)
 }

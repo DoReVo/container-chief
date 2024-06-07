@@ -10,39 +10,6 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-const DISCORD_BASE_API_URL = "https://discord.com/api"
-
-type InteractionWebhook struct {
-	AuthorizingIntegrationOwners map[string]interface{} `json:"authorizing_integration_owners"`
-	AppPermissions               string                 `json:"app_permissions"`
-	ApplicationID                string                 `json:"application_id"`
-	ID                           string                 `json:"id"`
-	Token                        string                 `json:"token"`
-	Entitlements                 []interface{}          `json:"entitlements"`
-	User                         DiscordUser            `json:"user"`
-	Type                         int                    `json:"type"`
-	Version                      int                    `json:"version"`
-}
-
-type DiscordUser struct {
-	AvatarDecorationData interface{} `json:"avatar_decoration_data"`
-	Clan                 interface{} `json:"clan"`
-	Avatar               string      `json:"avatar"`
-	Discriminator        string      `json:"discriminator"`
-	GlobalName           string      `json:"global_name"`
-	ID                   string      `json:"id"`
-	Username             string      `json:"username"`
-	PublicFlags          int         `json:"public_flags"`
-	Bot                  bool        `json:"bot"`
-	System               bool        `json:"system"`
-}
-
-type DiscordService struct {
-	AppPublicKey string
-	AppID        string
-	BotToken     string
-}
-
 func NewDiscordService() *DiscordService {
 	appPublicKey := os.Getenv("DISCORD_APP_PUBLIC_KEY")
 	appId := os.Getenv("DISCORD_APP_ID")
@@ -90,29 +57,6 @@ func (ds *DiscordService) VerifyWebhookSignature(signature string, timestamp str
 	return ed25519.Verify(decodedPublicKey, []byte(msg), decodedSignature)
 }
 
-type Command struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	Type        int             `json:"type"`
-	Options     []CommandOption `json:"options"`
-}
-
-type CommandOptionType int
-
-const (
-	StringType  CommandOptionType = 3
-	IntegerType CommandOptionType = 4
-)
-
-type CommandOption struct {
-	Type        CommandOptionType `json:"type"`
-	Name        string            `json:"name"`
-	Description string            `json:"description"`
-	Required    bool              `json:"required"`
-}
-
-var ErrFailedSettingUpGlobalCommand = fmt.Errorf("Failed setting up command")
-
 func (ds *DiscordService) SetGlobalCommand() error {
 	globalCommands := []Command{
 		{
@@ -127,23 +71,53 @@ func (ds *DiscordService) SetGlobalCommand() error {
 			// },
 		},
 	}
-	agent := fiber.Put(DISCORD_BASE_API_URL+"/applications/"+ds.AppID+"/commands").JSON(globalCommands).Set("Authorization", "Bot "+ds.BotToken)
+
+	url := fmt.Sprintf("%s/applications/%s/commands", DISCORD_BASE_API_URL, ds.AppID)
+
+	if err := ds.SendRequest(fiber.MethodPut, url, globalCommands); err != nil {
+		slog.Warn("Error when trying to set global command", "error", err)
+		return err
+	}
+
+	return nil
+}
+
+func (ds *DiscordService) RespondInteraction(interactionId string, interactionToken string, response InteractionResponse) error {
+	url := fmt.Sprintf("%v/interactions/%v/%v/callback", DISCORD_BASE_API_URL, interactionId, interactionToken)
+
+	if err := ds.SendRequest(fiber.MethodPost, url, response); err != nil {
+		slog.Warn("Error when trying to respond to interaction", "error", err)
+		return err
+	}
+
+	return nil
+}
+
+func (ds *DiscordService) SendRequest(method string, url string, body interface{}) error {
+	agent := fiber.AcquireAgent()
+	agent.Set("Authorization", "Bot "+ds.BotToken)
+	agent.Request().Header.SetMethod(method)
+	agent.Request().SetRequestURI(url)
+	agent.JSON(body)
+
+	if err := agent.Parse(); err != nil {
+		slog.Error("Cannot parse agent", "error", "err")
+		return err
+	}
 
 	code, body, errs := agent.String()
 
-	slog.Info("Error object", "error", errs)
-
-	if errs != nil && len(errs) > 0 {
-		slog.Warn("Error while trying to set global command", "error", errs)
+	if len(errs) > 0 {
+		slog.Warn("Error in sending request to Discord", "error", errs)
 		return errs[len(errs)-1]
 	}
 
-	if code != 200 {
-		slog.Warn("Failed setting up global command", "response", body)
+	if code < 200 || code >= 300 {
+		slog.Warn("Error response from discord", "response", body)
 		return ErrFailedSettingUpGlobalCommand
 	}
 
-	slog.Info("Response from setting global command", "code", code, "response", body)
+	slog.Info("Response from discord", "code", code, "response", body)
 
 	return nil
 }
